@@ -10,7 +10,7 @@
 
 # Do Not Just Execute.
 # ------------------------------------------------------------
-#break
+break
 
 
 # Path to PVE scripts and Functions.
@@ -28,7 +28,9 @@ if ($PSScriptRoot -and $PSScriptRoot -ne "") {
 # Import PVE modules
 # ------------------------------------------------------------
 Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force -Confirm:$false
-Get-ChildItem -Path "$RootPath\Functions" | ForEach-Object { Import-Module -Name $_.FullName -Force }
+Get-ChildItem -Path "C:\Scripts\" -Recurse -File -Filter "*PVE*.ps1" |
+    Where-Object { $_.DirectoryName -like "*\Functions" } |
+    ForEach-Object { Import-Module -Name $_.FullName -Force }
 
 
 # Connect to PVE Cluster

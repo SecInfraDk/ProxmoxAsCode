@@ -1,17 +1,17 @@
 # Documentation
+After Deployment server have been created and PVE cluster installed and configured.
 
-## Purpose
+1. Create PowerShell API token with required permissions.
 
-Documents Proxmox VE provisioning and operations.
+2. Run ProxmoxAsCode\BuildScripts\Create-ProxmoxConfig.ps1
+- This will create Proxmox-Connection.json file.
 
-## Example contents
+3. Run ProxmoxAsCode\BuildScripts\Create-PVEDeploymentServer.ps1
+- This will prepare the Core Deployment server from where all the VMs are created.
 
-Template prerequisites, command usage, configuration formats, and platform-specific troubleshooting.
+4. Run ProxmoxAsCode\Scripts\New-PVEVMTemplate.ps1
+- Use this to create new Windows Server template, every time the Windows ISO have been updated, for at fully patched template.
 
-## Scope
+5. Run ....
 
-Customer and lab topology documentation stays with the deployment.
 
-## Dependencies
-
-Guides follow the applicable script versions and platform API or tooling.

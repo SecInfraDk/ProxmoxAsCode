@@ -22,10 +22,16 @@
 
 # Name of the "Master" VM
 # ------------------------------------------------------------
-$VMName               = "CoreDeployment"
-$DefaultAdminPassword = "P@ssw0rd2025$"
-$ServerVersionsISO    = @("2019","2022","2025")
-$SelectedOS = $ServerVersionsISO | Out-GridView -Title "Select the Deployment Server OS Version" -OutputMode Single
+$VMName               = "DCDS-01"
+
+
+# Define OS ISO files to download
+# ------------------------------------------------------------
+$EvalCenter = Invoke-WebRequest -Uri "https://www.microsoft.com/en-us/evalcenter" -UseBasicParsing
+$EvalVersions = ($EvalCenter.links | where {$_.href -like "*evaluate-windows-server-20*"}).href | 
+    ForEach-Object { [regex]::Match($_, '\d{4}(?=-|$)').Value } |
+        Sort-Object -Unique
+$ServerVersionsISO = $EvalVersions | Out-GridView -Title "Select the Windows Server versions to Download" -OutputMode Multiple
 
 
 # Path to PVE scripts and Functions.
@@ -49,18 +55,6 @@ $FileDialog.Title  = "Select Product keys file"
 if ($FileDialog.ShowDialog() -eq "OK") {
     $ProductKeys = Get-Content -Path $FileDialog.FileName | ConvertFrom-Json
     $ProductKey  = ($ProductKeys | Where {$_.Product -like "Windows Server *$SelectedOS*Standard"}).Key
-}
-else {
-    Write-Warning "No file selected"
-    Write-Host "Download and execute `"InfraAsCode/Secrets/Scripts/Create-GitHubConfig.ps1`" and rerun this script"
-}
-
-
-# Define the GIT connection information, If the Repo is private.
-# ------------------------------------------------------------
-$FileDialog.Title  = "Select GIThub secrets file"
-if ($FileDialog.ShowDialog() -eq "OK") {
-    $GitConnection = Get-Content -Path $FileDialog.FileName | ConvertFrom-Json
 }
 else {
     Write-Warning "No file selected"
@@ -93,38 +87,6 @@ If (-Not (Test-Path "$TempPath\Functions")) {
 }
 
 
-# Get required PVE modules
-# ------------------------------------------------------------
-$RequiredScripts = @()
-$RequiredScripts += [pscustomobject]@{ LocalPath = "\Functions"; RemotePath = "InfraAsCode/contents/Platforms/PVE/Functions/Get-PVELocation.ps1" }
-$RequiredScripts += [pscustomobject]@{ LocalPath = "\Functions"; RemotePath = "InfraAsCode/contents/Platforms/PVE/Functions/Get-PVENextID.ps1"   }
-$RequiredScripts += [pscustomobject]@{ LocalPath = "\Functions"; RemotePath = "InfraAsCode/contents/Modules/New-ISOFile.ps1"                     }
-$RequiredScripts += [pscustomobject]@{ LocalPath = "\Functions"; RemotePath = "InfraAsCode/contents/Modules/New-Unattend.ps1"                    }
-$RequiredScripts += [pscustomobject]@{ LocalPath = "\Functions"; RemotePath = "InfraAsCode/contents/Platforms/PVE/Functions/PVE-Connect.ps1"     }
-$RequiredScripts += [pscustomobject]@{ LocalPath = "\Functions"; RemotePath = "InfraAsCode/contents/Platforms/PVE/Functions/Start-PVEWait.ps1"   }
-$RequiredScripts += [pscustomobject]@{ LocalPath = "\Functions"; RemotePath = "InfraAsCode/contents/Platforms/PVE/Functions/Upload-PVEISO.ps1"   }
-$RequiredScripts += [pscustomobject]@{ LocalPath = ""; RemotePath = "InfraTools/contents/DeploymentService/Prep-DeploymentServer.ps1"            }
-$RequiredScripts += [pscustomobject]@{ LocalPath = ""; RemotePath = "InfraTools/contents/DeploymentService/DeploymentServerFiles.json"           }
-
-
-$RequiredScripts | Foreach {
-    $LocalFile = Split-Path -Path $_.RemotePath -Leaf
-    $FilePath  = Join-Path -Path $TempPath -ChildPath "$($_.LocalPath)\$LocalFile"
-    
-    if (-Not (Test-Path -Path $FilePath)) {
-
-        if ( ($GitConnection.Token) -and ($GitConnection.Token -Notlike "*<Token>*") ) {
-            $Response = Invoke-RestMethod -Uri "$($GitConnection.Url)/$($_.RemotePath)" -Headers @{ Authorization = "token $($GitConnection.Token)" }
-        } else {
-            $Response = Invoke-RestMethod -Uri "$($GitConnection.Url)/$($_.RemotePath)"
-        }
-    
-        $FileBytes = [System.Convert]::FromBase64String($Response.content)
-        [System.IO.File]::WriteAllBytes($FilePath, $FileBytes)
-    }
-}
-
-
 # Required to import unsigned modules
 # ------------------------------------------------------------
 Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force -Confirm:$false
@@ -132,11 +94,16 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force -Confirm:$fals
 
 # Import PVE modules
 # ------------------------------------------------------------
-Get-ChildItem -Path "$TempPath\Functions" | ForEach-Object { Import-Module -Name $_.FullName -Force }
-if ( (-Not (Get-Command PVE-Connect)) -or (-NOT (Get-Command New-ISOFile)) ) {
-    Throw "Unable to load modules"
-    break
-}
+# Rember to update the PATH
+Get-ChildItem -Path "G:\Shares\SecInfraDK\ProxmoxAsCode\Functions" -Recurse -File -Filter "*PVE*.ps1" |
+    Where-Object { $_.DirectoryName -like "*\Functions" } |
+    ForEach-Object { Import-Module -Name $_.FullName -Force }
+
+
+# Import PVE modules
+# ------------------------------------------------------------
+# Rember to update the PATH
+Get-ChildItem -Path "G:\Shares\SecInfraDK\InfraModules\Modules" -Directory | ForEach-Object { Import-Module -Name $_.FullName -Force }
 
 
 # Connect to PVE Cluster
@@ -149,8 +116,9 @@ $PVEConnect = PVE-Connect -Authkey "$($PVESecret.User)!$($PVESecret.TokenID)=$($
 
 # Get information required to create the template (VM)
 # ------------------------------------------------------------
-$PVELocation = Get-PVELocation -ProxmoxAPI $PVEConnect.PVEAPI -Headers $PVEConnect.Headers -IncludeNode $PVESecret.HostName
-$ISOStorage  = ((Invoke-RestMethod -Uri "$($PVEConnect.PVEAPI)/nodes/$($PVELocation.name)/storage" -Headers $($PVEConnect.Headers)).data | Where {$_.content -like "*iso*" -and $_.type -eq "dir"}).storage
+$PVELocation = Get-PVELocation -ProxmoxAPI $PVEConnect.PVEAPI -Headers $PVEConnect.Headers
+$ISOStorage  = ((Invoke-RestMethod -Uri "$($PVEConnect.PVEAPI)/nodes/$($PVELocation.name)/storage" -Headers $($PVEConnect.Headers)).data |
+    Where {$_.content -like "*iso*" -and $_.type -eq "dir"}).storage
 
 
 # Download Windows Server EVAL Isos
@@ -164,7 +132,7 @@ $ServerVersionsISO | Foreach {
     $DownloadBody = "content=iso"
     $DownloadBody += "&node=$($PVELocation.name)"
     $DownloadBody += "&url=$([uri]::EscapeDataString($DownloadUrl))"
-    $DownloadBody += "&filename=$([uri]::EscapeDataString("Server$($_).iso"))"
+    $DownloadBody += "&filename=$([uri]::EscapeDataString("Server_$($_)_Eval.iso"))"
 
     $DownloadResults += [pscustomobject]@{
         Version = $($_);
@@ -227,8 +195,7 @@ Start "$($env:TEMP)\$VMID\Scripts"
 
 # Save / Copy the PVE and GIT connection infomation.
 # ------------------------------------------------------------
-$GitConnection | ConvertTo-Json | Out-File -FilePath "$($env:TEMP)\$VMID\Scripts\GitHub-Connection.json" -Encoding utf8
-$PVESecret     | ConvertTo-Json | Out-File -FilePath "$($env:TEMP)\$VMID\Scripts\Proxmox-Connection.json" -Encoding utf8
+$PVESecret | ConvertTo-Json | Out-File -FilePath "$($env:TEMP)\$VMID\Scripts\Proxmox-Connection.json" -Encoding utf8
 
 
 # Create AutoUnattended.iso
@@ -492,6 +459,9 @@ $UnattendMedia = $ISOFiles | Where {$_ -like "*$VMID*.iso"}
 $InstallMedia = $ISOFiles | Where {$_ -like "*$SelectedOS*"}
 if ($InstallMedia.count -gt 1) {
     $InstallMedia = $InstallMedia | Out-GridView -Title "Multiple ISO files exist, please select one" -OutputMode Single
+}
+if ($DriverMedia.count -gt 1) {
+    $DriverMedia = $DriverMedia | Out-GridView -Title "Multiple ISO files exist, please select one" -OutputMode Single
 }
 <#
 $DriverMedia   = $ISOFiles | Where {$_ -like "*virtio-win*"}
