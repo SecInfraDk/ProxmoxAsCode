@@ -82,9 +82,9 @@ else {
 If (-Not (Test-Path "$TempPath")) {
     New-Item -Path "$TempPath" -ItemType Directory | Out-Null
 }
-If (-Not (Test-Path "$TempPath\Functions")) {
-    New-Item -Path "$TempPath\Functions" -ItemType Directory | Out-Null
-}
+#If (-Not (Test-Path "$TempPath\Functions")) {
+#    New-Item -Path "$TempPath\Functions" -ItemType Directory | Out-Null
+#}
 
 
 # Required to import unsigned modules
@@ -186,8 +186,11 @@ if (-Not(Test-Path -Path "$($env:TEMP)\$VMID\Scripts")) {
 # ------------------------------------------------------------
 #Move-Item -Path "$TempPath\Prep-DeploymentServer.ps1" -Destination "$($env:TEMP)\$VMID\Scripts"
 #Move-Item -Path "$TempPath\DeploymentServerFiles.json" -Destination "$($env:TEMP)\$VMID\Scripts"
+#Copy-Item -Path "$TempPath\DeploymentServerFiles.json" -Destination "$($env:TEMP)\$VMID\Scripts"
+
+# Update Path.
 Copy-Item -Path "$TempPath\Prep-DeploymentServer.ps1" -Destination "$($env:TEMP)\$VMID\Scripts"
-Copy-Item -Path "$TempPath\DeploymentServerFiles.json" -Destination "$($env:TEMP)\$VMID\Scripts"
+
 <#
 Start "$($env:TEMP)\$VMID\Scripts"
 #>
@@ -209,8 +212,9 @@ $PVESecret | ConvertTo-Json | Out-File -FilePath "$($env:TEMP)\$VMID\Scripts\Pro
     [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes("& `"C:\Scripts\Prep-DeploymentServer.ps1`""))
 
 #>
-New-Unattend -ComputerName $VMName -AdminUsername "Administrator" -AdminPassword $DefaultAdminPassword `
-    -ProductKey $ProductKey `
+#New-Unattend -ComputerName $VMName -AdminUsername "Administrator" -AdminPassword $DefaultAdminPassword `
+#    -ProductKey $ProductKey `
+New-Unattend -ComputerName $VMName `
     -FirstLogonCommands @(
         [PSCustomObject]@{ Name = "Add Drivers";  Command = "PowerShell -NoProfile -ExecutionPolicy Bypass -EncodedCommand RwBDAEkAIAAoACgAKABHAGUAdAAtAFYAbwBsAHUAbQBlACAALQBGAGkAbABlAFMAeQBzAHQAZQBtAEwAYQBiAGUAbAAgACIAdgBpAHIAdABpAG8ALQB3AGkAbgAqACIAKQAuAEQAcgBpAHYAZQBMAGUAdAB0AGUAcgApACAAKwAgACIAOgBcACIAKQAgAC0AUgBlAGMAdQByAHMAZQAgAC0ASQBuAGMAbAB1AGQAZQAgACoALgBpAG4AZgAgAHwAIAA/ACAAewAgACQAXwAuAEYAdQBsAGwATgBhAG0AZQAgAC0AbQBhAHQAYwBoACAAIgAyAEsAMgA1ACIAIAAtAGEAbgBkACAAJABfAC4ARgB1AGwAbABOAGEAbQBlACAALQBtAGEAdABjAGgAIAAiAEEATQBEACIAIAB9ACAAfAAgACUAIAB7ACAAcABuAHAAdQB0AGkAbAAgAC8AYQBkAGQALQBEAHIAaQB2AGUAcgAgACQAXwAuAEYAdQBsAGwATgBhAG0AZQAgAC8AaQBuAHMAdABhAGwAbAAgAH0A" }
         [PSCustomObject]@{ Name = "Copy Scripts"; Command = "PowerShell -NoProfile -ExecutionPolicy Bypass -EncodedCommand bQBrAGQAaQByACAALQBQAGEAdABoACAAIgAkACgAJABFAE4AVgA6AFMAeQBzAHQAZQBtAEQAcgBpAHYAZQApAFwAUwBjAHIAaQBwAHQAcwAiADsAIABHAGUAdAAtAFYAbwBsAHUAbQBlACAAfAAgAFcAaABlAHIAZQAgAHsAJABfAC4ARAByAGkAdgBlAFQAeQBwAGUAIAAtAGUAcQAgACIAQwBEAC0AUgBvAG0AIgB9ACAAfAAgACUAIAB7ACAAaQBmACAAKABUAGUAcwB0AC0AUABhAHQAaAAgAC0AUABhAHQAaAAgACIAJAAoACQAXwAuAEQAcgBpAHYAZQBMAGUAdAB0AGUAcgApADoAXABTAGMAcgBpAHAAdABzACIAKQAgAHsAIABHAEMASQAgAC0AUABhAHQAaAAgACIAJAAoACQAXwAuAEQAcgBpAHYAZQBMAGUAdAB0AGUAcgApADoAXABTAGMAcgBpAHAAdABzACIAIAB8ACAAJQAgAHsAIABDAG8AcAB5ACAALQBQAGEAdABoACAAJAAoACQAXwAuAEYAdQBsAGwATgBhAG0AZQApACAALQBEAGUAcwB0AGkAbgBhAHQAaQBvAG4AIAAiACQAKAAkAEUATgBWADoAUwB5AHMAdABlAG0ARAByAGkAdgBlACkAXABTAGMAcgBpAHAAdABzACIAIAAtAEYAbwByAGMAZQAgAH0AfQB9AA==" }
@@ -222,11 +226,22 @@ New-Unattend -ComputerName $VMName -AdminUsername "Administrator" -AdminPassword
     #>
 
 
-#region XML Unattend modifications
-
 # Load XML data
 # ------------------------------------------------------------
 $XMLData = [XML](Get-Content -Path "$($env:TEMP)\$VMID\AutoUnattend.xml")
+$AdminPass = (($Unattended.unattend.settings| ? {$_.pass -eq "oobeSystem"}).component | Where {$_.Name -like "*Setup"}).UserAccounts.AdministratorPassword.value
+
+Write-Output "-----------------------------------------------------------------"
+Write-Output ""
+Write-Output "Please take note of default credentials"
+Write-Output ""
+Write-Output "Default Username : Administrator"
+Write-Output "Default Password : $AdminPass"
+Write-Output ""
+Write-Output "-----------------------------------------------------------------"
+
+
+#region XML Unattend modifications
 
 # Define Namespaces
 # ------------------------------------------------------------

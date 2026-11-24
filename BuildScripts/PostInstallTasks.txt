@@ -1,0 +1,3 @@
+Mangler at fjerne media fra Deployment serveren..
+
+Og cleanup af Autologin..

@@ -33,6 +33,13 @@ Get-ChildItem -Path "C:\Scripts\" -Recurse -File -Filter "*PVE*.ps1" |
     ForEach-Object { Import-Module -Name $_.FullName -Force }
 
 
+# Import Shared modules
+# ------------------------------------------------------------
+# Rember to update the PATH
+Get-ChildItem -Path "C:\Scripts\" -Recurse -File -Filter "*.psm1" |
+    ForEach-Object { Import-Module -Name $_.FullName -Force }
+
+
 # Connect to PVE Cluster
 # ------------------------------------------------------------
 if (-NOT (Test-Path -Path "$RootPath\Proxmox-Connection.json")) {
@@ -69,8 +76,12 @@ $PVELocation = Get-PVELocation -ProxmoxAPI $PVEConnect.PVEAPI -Headers $PVEConne
 
 # List ISO content, and add selected ISO to This VM
 # ------------------------------------------------------------
-$ISOStorage  = ((Invoke-RestMethod -Uri "$($PVEConnect.PVEAPI)/nodes/$($PVELocation.name)/storage" -Headers $($PVEConnect.Headers)).data | Where {$_.content -like "*iso*" -and $_.type -eq "dir"}).storage
-$ServerISO = (Invoke-RestMethod -Uri "$($PVEConnect.PVEAPI)/nodes/$($PVELocation.name)/storage/$ISOStorage/content" -Headers $($PVEConnect.Headers)).data | Select-Object -Property volid,format,size | Where {$_.volid -like "*Windows*Server*"} | Out-GridView -OutputMode Single
+$ISOStorage  = ((Invoke-RestMethod -Uri "$($PVEConnect.PVEAPI)/nodes/$($PVELocation.name)/storage" -Headers $($PVEConnect.Headers)).data |
+    Where {$_.content -like "*iso*" -and $_.type -eq "dir"}).storage
+
+$ServerISO = (Invoke-RestMethod -Uri "$($PVEConnect.PVEAPI)/nodes/$($PVELocation.name)/storage/$ISOStorage/content" -Headers $($PVEConnect.Headers)).data |
+    Select-Object -Property volid,format,size | Where {$_.volid -like "*Windows*Server*"} | Out-GridView -OutputMode Single
+
 $DiskId = Get-PVENextDiskID -ProxmoxAPI $PVEConnect.PVEAPI -Headers $PVEConnect.Headers -Node $MasterID.Node -VMID $MasterID.VmID
 
 $Body = "$DiskId=$([uri]::EscapeDataString("$($ServerISO.volid),media=cdrom"))"
@@ -244,7 +255,7 @@ if (!(Test-Path -Path "$VHDXVolume3\Windows\Panther")) {
 
 # Encode the FirstLogonCommands !
 # ------------------------------------------------------------
-$EncodedCommand = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes("& `"C:\Scripts\FirstBoot.ps1`""))
+$EncodedCommand = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes("& `"C:\Scripts\BootStrap.ps1`""))
 
 
 # Create Default Unattended
@@ -274,7 +285,8 @@ if (!(Test-Path -Path "$VHDXVolume3\Scripts")) {
     New-Item -Path "$VHDXVolume3\Scripts" -ItemType Directory | Out-Null
 }
 
-Invoke-RestMethod -Uri "http://localhost/deployment/BuildScripts/Common/FirstBoot.ps1" -OutFile "$VHDXVolume3\Scripts\FirstBoot.ps1"
+
+Get-ChildItem -Path "C:\Scripts\" -Recurse -File -Filter "BootStrap.ps1" | Copy-Item -Destination "$VHDXVolume3\Scripts\"
 <#
 ISE "$VHDXVolume3\Scripts\FirstBoot.ps1"
 #>
