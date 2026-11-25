@@ -12,6 +12,10 @@ After PVE cluster installed and configured.
 4. Run ProxmoxAsCode\Scripts\New-PVEVMTemplate.ps1
 - Use this to create new Windows Server template, every time the Windows ISO have been updated, for at fully patched template.
 
-5. Run ....
+5a. Run InfraAsCode\ConfigFiles\Tools\Create-VMDomain.ps1
+- Only IF you need to create a new AD Domain from the first Domain Controller.
+
+5b. Run InfraAsCode\ConfigFiles\Tools\Add-VM2Domain.ps1
+- For any additional servers.
 
 

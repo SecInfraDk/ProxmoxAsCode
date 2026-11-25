@@ -40,31 +40,21 @@ $JsonFiles = (Split-Path -path ($Response.links.href | Where {$_ -like "*.json"}
 # Import PVE modules
 # ------------------------------------------------------------
 Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force -Confirm:$false
-Get-ChildItem -Path "$RootPath\Functions" | ForEach-Object { Import-Module -Name $_.FullName -Force }
+Get-ChildItem -Path "C:\Scripts\" -Recurse -File -Filter "*PVE*.ps1" |
+    Where-Object { $_.DirectoryName -like "*\Functions" } |
+    ForEach-Object { Import-Module -Name $_.FullName -Force }
+
+
+# Import Shared modules
+# ------------------------------------------------------------
+# Rember to update the PATH
+Get-ChildItem -Path "C:\Scripts\" -Recurse -File -Filter "*.psm1" |
+    ForEach-Object { Import-Module -Name $_.FullName -Force }
 
 
 # Connect to PVE Cluster
 # ------------------------------------------------------------
-if (-NOT (Test-Path -Path "$RootPath\Proxmox-Connection.json")) {
-
-    Add-Type -AssemblyName System.Windows.Forms
-
-    $FileDialog = New-Object System.Windows.Forms.OpenFileDialog
-    $FileDialog.InitialDirectory = $RootPath
-    $FileDialog.Filter = "JSON files (*.json)|*.json"
-    $FileDialog.Title  = "Select file"
-
-    if ($FileDialog.ShowDialog() -eq "OK") {
-        $PVESecret = Get-Content -Path $FileDialog.FileName | ConvertFrom-Json
-    }
-    else {
-        Throw "No file selected"
-    }
-} else {
-    $PVESecret = Get-Content -Path "$RootPath\Proxmox-Connection.json" | Convertfrom-Json
-}
-
-$PVEConnect = PVE-Connect -Authkey "$($PVESecret.User)!$($PVESecret.TokenID)=$($PVESecret.Token)" -Hostaddr $($PVESecret.Host)
+$PVEConnect = PVE-Connect -ConfigPath $RootPath -IgnoreCertificateErrors
 
 
 # Get Id of Deployment server....
@@ -102,8 +92,9 @@ $Template = [PSCustomObject]@{
 
 # Get VM list from PVE.
 # ------------------------------------------------------------
-$AllVMIDs = (Invoke-RestMethod -Uri "$($PVEConnect.PVEAPI)/cluster/resources?type=vm" -Headers $PVEConnect.Headers -Verbose:$false).data | Where {$_.template -eq 0} | Select-Object vmid, name, node
-$VMMacAddresses = $AllVMIDs | Foreach {
+$AllVMIDs = (Invoke-RestMethod -Uri "$($PVEConnect.PVEAPI)/cluster/resources?type=vm" -Headers $PVEConnect.Headers -Verbose:$false).data |
+    Where {$_.template -eq 0 -and $_.type -eq "qemu"} | Select-Object vmid, name, node
+$VMMacAddresses =$AllVMIDs | Foreach {
     $VMNet = (Invoke-RestMethod -Uri "$($PVEConnect.PVEAPI)/nodes/$($_.Node)/qemu/$($_.VMID)/config" -Headers $PVEConnect.Headers -Verbose:$false).data.net0
     $VMMac = ((($VMNet -split(","))[0]) -split("="))[-1]
     @("00","00") + ($VMMac -split(":"))[2..5] -Join("-")

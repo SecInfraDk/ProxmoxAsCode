@@ -31,7 +31,7 @@ $EvalCenter = Invoke-WebRequest -Uri "https://www.microsoft.com/en-us/evalcenter
 $EvalVersions = ($EvalCenter.links | where {$_.href -like "*evaluate-windows-server-20*"}).href | 
     ForEach-Object { [regex]::Match($_, '\d{4}(?=-|$)').Value } |
         Sort-Object -Unique
-$ServerVersionsISO = $EvalVersions | Out-GridView -Title "Select the Windows Server versions to Download" -OutputMode Multiple
+$ServerVersionsISO = $EvalVersions | Out-GridView -Title "Select the Deployment Server Windows version" -OutputMode Single
 
 
 # Path to PVE scripts and Functions.
